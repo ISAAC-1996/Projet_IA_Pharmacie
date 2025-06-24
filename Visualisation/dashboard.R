@@ -1,658 +1,624 @@
-# OSPHARM Application R Shiny v2
-# Interface avec animation de pharmacies et structure d'onglets avancée
-
+# OSPHARM Application R Shiny - Version Complète avec notifications, calendrier et filtre syndicat
 library(shiny)
 library(shinydashboard)
-library(leaflet)
-library(DT)
-library(plotly)
-library(dplyr)
-library(shinycssloaders)
 library(shinyWidgets)
-library(htmltools)
-
-# Données simulées de pharmacies
-set.seed(123)
-pharmacies_data <- data.frame(
-  id = 1:500,
-  nom = paste("Pharmacie", 1:500),
-  lat = runif(500, 43.0, 51.0),
-  lng = runif(500, -5.0, 8.0),
-  chiffre_affaires = round(runif(500, 50000, 500000)),
-  nb_produits = sample(100:2000, 500, replace = TRUE),
-  famille_principale = sample(c("Médicaments", "Parapharmacie", "Homéopathie", "Cosmétiques"), 500, replace = TRUE),
-  tva = sample(c("5.5%", "10%", "20%"), 500, replace = TRUE),
-  caractere = sample(c("Urbaine", "Rurale", "Semi-urbaine"), 500, replace = TRUE),
-  segment = sample(c("Premium", "Standard", "Économique"), 500, replace = TRUE),
-  syndicat = sample(c("FSPF", "USPO", "Indépendant"), 500, replace = TRUE)
-)
 
 # Interface utilisateur
 ui <- dashboardPage(
+  skin = "blue",
   dashboardHeader(
     title = tags$div(
-      tags$img(src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", 
-               height = "30px", style = "background-color: #00A86B; border-radius: 5px; padding: 2px;"),
-      "OSPHARM", 
-      style = "color: #00A86B; font-weight: bold; font-size: 18px;"
+      style = "display: flex; align-items: center;",
+      tags$img(
+        src = "https://isaac-1996.github.io/Localisation/logo.png",
+        height = "35px",
+        style = "margin-right: 10px;"
+      ),
+      tags$span("OSPHARM", class = "logo-text", style = "font-size: 20px; font-weight: bold; color: #22c55e;")
     ),
+    titleWidth = 250,
+    
+    # Zone A: Notifications (cloche)
+    dropdownMenu(type = "notifications", icon = icon("bell"),
+                 badgeStatus = "danger", headerText = "Vous avez 5 notifications",
+                 notificationItem(
+                   text = "Erreur critique système",
+                   icon("exclamation-triangle"),
+                   status = "danger"
+                 ),
+                 notificationItem(
+                   text = "Dysfonctionnement base de données",
+                   icon("database"),
+                   status = "warning"
+                 ),
+                 notificationItem(
+                   text = "Rapport mensuel généré avec succès",
+                   icon("check-circle"),
+                   status = "success"
+                 ),
+                 notificationItem(
+                   text = "Synchronisation échouée",
+                   icon("sync-alt"),
+                   status = "danger"
+                 ),
+                 notificationItem(
+                   text = "Validation des données terminée",
+                   icon("clipboard-check"),
+                   status = "success"
+                 )
+    ),
+    
+    # Zone B: Calendrier (Sélection mois/année)
     tags$li(class = "dropdown",
-            tags$a(href = "#", class = "dropdown-toggle", "data-toggle" = "dropdown",
-                   tags$i(class = "fa fa-calendar"), "A")),
+            tags$a(href = "#", class = "dropdown-toggle", `data-toggle` = "dropdown",
+                   icon("calendar-alt"),
+                   tags$span("Période")
+            ),
+            tags$ul(class = "dropdown-menu", style = "min-width: 300px;",
+                    tags$li(
+                      tags$div(style = "padding: 15px;",
+                               tags$h5("Sélection de période", style = "margin-top: 0; color: #22c55e; font-weight: bold;"),
+                               fluidRow(
+                                 column(6,
+                                        selectInput("mois_debut",
+                                                    label = "Mois de début:",
+                                                    choices = list(
+                                                      "Janvier" = 1, "Février" = 2, "Mars" = 3, "Avril" = 4,
+                                                      "Mai" = 5, "Juin" = 6, "Juillet" = 7, "Août" = 8,
+                                                      "Septembre" = 9, "Octobre" = 10, "Novembre" = 11, "Décembre" = 12
+                                                    ),
+                                                    selected = format(Sys.Date(), "%m")
+                                        )
+                                 ),
+                                 column(6,
+                                        selectInput("annee_debut",
+                                                    label = "Année:",
+                                                    choices = 2020:2030,
+                                                    selected = format(Sys.Date(), "%Y")
+                                        )
+                                 )
+                               ),
+                               fluidRow(
+                                 column(6,
+                                        selectInput("mois_fin",
+                                                    label = "Mois de fin (optionnel):",
+                                                    choices = c("Aucun" = "", list(
+                                                      "Janvier" = 1, "Février" = 2, "Mars" = 3, "Avril" = 4,
+                                                      "Mai" = 5, "Juin" = 6, "Juillet" = 7, "Août" = 8,
+                                                      "Septembre" = 9, "Octobre" = 10, "Novembre" = 11, "Décembre" = 12
+                                                    )),
+                                                    selected = ""
+                                        )
+                                 ),
+                                 column(6,
+                                        selectInput("annee_fin",
+                                                    label = "Année fin:",
+                                                    choices = 2020:2030,
+                                                    selected = format(Sys.Date(), "%Y")
+                                        )
+                                 )
+                               ),
+                               tags$div(style = "margin-top: 10px; padding: 8px; background-color: rgba(34, 197, 94, 0.1); border-radius: 4px;",
+                                        tags$small(
+                                          tags$strong("Période sélectionnée: "),
+                                          textOutput("periode_selectionnee", inline = TRUE)
+                                        )
+                               )
+                      )
+                    )
+            )
+    ),
+    
+    # Zone C: Filtre Syndicat
     tags$li(class = "dropdown",
-            tags$a(href = "#", class = "dropdown-toggle", "data-toggle" = "dropdown",
-                   tags$i(class = "fa fa-users"), "B")),
-    tags$li(class = "dropdown",
-            tags$a(href = "#", class = "dropdown-toggle", "data-toggle" = "dropdown",
-                   "C")),
-    tags$li(class = "dropdown",
-            tags$a(href = "#", class = "dropdown-toggle", "data-toggle" = "dropdown",
-                   tags$i(class = "fa fa-bell"), "Z"))
+            tags$a(href = "#", class = "dropdown-toggle", `data-toggle` = "dropdown",
+                   icon("filter"),
+                   "Syndicat"
+            ),
+            tags$ul(class = "dropdown-menu",
+                    tags$li(
+                      tags$div(style = "padding: 10px; min-width: 200px;",
+                               selectInput("syndicat_filter",
+                                           label = "Choisir le syndicat:",
+                                           choices = list(
+                                             "Tous les syndicats" = "all",
+                                             "Syndicat A" = "syndicat_a",
+                                             "Syndicat B" = "syndicat_b",
+                                             "Syndicat C" = "syndicat_c",
+                                             "Syndicat D" = "syndicat_d"
+                                           ),
+                                           selected = "all"
+                               )
+                      )
+                    )
+            )
+    )
   ),
   
   dashboardSidebar(
     sidebarMenu(
       id = "sidebar",
-      menuItem("1 - Infos Générales", tabName = "infos_generales", icon = icon("info-circle"),
-               menuSubItem("Vue Carte", tabName = "infos_gen_carte"),
-               menuSubItem("Statistiques", tabName = "infos_gen_stats")),
-      
-      menuItem("2 - Infos Produits", tabName = "infos_produits", icon = icon("pills"),
-               menuSubItem("Vue Carte", tabName = "produits_carte"),
-               menuSubItem("Statistiques", tabName = "produits_stats")),
-      
-      menuItem("3 - Infos Famille", tabName = "infos_famille", icon = icon("sitemap"),
-               menuSubItem("Vue Carte", tabName = "famille_carte"),
-               menuSubItem("Statistiques", tabName = "famille_stats")),
-      
-      menuItem("4 - Infos TVA", tabName = "infos_tva", icon = icon("percent"),
-               menuSubItem("Vue Carte", tabName = "tva_carte"),
-               menuSubItem("Statistiques", tabName = "tva_stats")),
-      
-      menuItem("5 - Infos Caractère", tabName = "infos_caractere", icon = icon("map-marker"),
-               menuSubItem("Vue Carte", tabName = "caractere_carte"),
-               menuSubItem("Statistiques", tabName = "caractere_stats")),
-      
-      menuItem("6 - Segmentation", tabName = "segmentation", icon = icon("chart-pie"),
-               menuSubItem("Vue Carte", tabName = "segment_carte"),
-               menuSubItem("Statistiques", tabName = "segment_stats"))
-    ),
-    
-    # Filtres
-    div(style = "padding: 15px;",
-        h4("Filtres Multi-Strates", style = "color: #00A86B;"),
-        selectInput("filtre_region", "Région:", 
-                    choices = c("Toutes" = "all", "Nord" = "nord", "Sud" = "sud", "Est" = "est", "Ouest" = "ouest"),
-                    selected = "all"),
-        selectInput("filtre_syndicat", "Syndicat:", 
-                    choices = c("Tous" = "all", unique(pharmacies_data$syndicat)),
-                    selected = "all"),
-        sliderInput("filtre_ca", "Chiffre d'affaires (???):",
-                    min = 0, max = 500000, value = c(0, 500000), step = 10000)
+      menuItem("Infos Générales", tabName = "infos_generales", icon = icon("info-circle"),
+               menuSubItem("Vue Carte", tabName = "infos_gen_carte", icon = icon("map")),
+               menuSubItem("Statistiques", tabName = "infos_gen_stats", icon = icon("chart-bar"))),
+      menuItem("Infos Produits", tabName = "infos_produits", icon = icon("pills"),
+               menuSubItem("Vue Carte", tabName = "produits_carte", icon = icon("map")),
+               menuSubItem("Statistiques", tabName = "produits_stats", icon = icon("chart-bar"))),
+      menuItem("Infos Famille", tabName = "infos_famille", icon = icon("sitemap"),
+               menuSubItem("Vue Carte", tabName = "famille_carte", icon = icon("map")),
+               menuSubItem("Statistiques", tabName = "famille_stats", icon = icon("chart-bar"))),
+      menuItem("Infos TVA", tabName = "infos_tva", icon = icon("percent"),
+               menuSubItem("Vue Carte", tabName = "tva_carte", icon = icon("map")),
+               menuSubItem("Statistiques", tabName = "tva_stats", icon = icon("chart-bar"))),
+      menuItem("Infos Caractère", tabName = "infos_caractere", icon = icon("map-marker"),
+               menuSubItem("Vue Carte", tabName = "caractere_carte", icon = icon("map")),
+               menuSubItem("Statistiques", tabName = "caractere_stats", icon = icon("chart-bar"))),
+      menuItem("Segmentation", tabName = "segmentation", icon = icon("chart-pie"),
+               menuSubItem("Vue Carte", tabName = "segment_carte", icon = icon("map")),
+               menuSubItem("Statistiques", tabName = "segment_stats", icon = icon("chart-bar"))),
+      div(
+        style = "position: absolute; bottom: 10px; left: 10px; right: 10px; padding: 10px; text-align: center;",
+        uiOutput("theme_switch")
+      )
     )
   ),
   
   dashboardBody(
     tags$head(
       tags$style(HTML("
-        .content-wrapper, .right-side {
-          background-color: #2c3e50;
+        /* DARK MODE DEFAULT */
+        .content-wrapper, .right-side, .content {
+          background-color: #1a1a1a !important;
+          color: white !important;
         }
+
+        .main-header, .main-header .navbar, .main-header .logo {
+          background-color: #1a1a1a !important;
+          color: #22c55e !important;
+          border-bottom: 1px solid #333 !important;
+        }
+
+        .skin-blue .main-sidebar {
+          background-color: #000000 !important;
+        }
+        
+        .form-group label {
+          font-size: 14px !important;
+          margin-bottom: 0px !important;
+        }
+
+        .skin-blue .sidebar-menu > li > a,
+        .skin-blue .sidebar-menu > li > a > i {
+          color: white !important;
+          font-weight: bold !important;
+        }
+
+        .skin-blue .sidebar-menu > li.active > a,
+        .skin-blue .sidebar-menu > li.active > a > i {
+          background-color: #22c55e !important;
+          color: black !important;
+          font-weight: bold !important;
+        }
+
+        .logo-text {
+          color: #22c55e !important;
+          font-size: 24px !important;
+          font-weight: bold !important;
+        }
+
         .box {
-          background-color: #34495e;
-          border: 1px solid #00A86B;
+          background-color: #2d2d2d !important;
+          border: 1px solid #22c55e !important;
+          color: white !important;
+          border-radius: 8px;
         }
+
         .box-header {
-          color: #00A86B;
+          background-color: #2d2d2d !important;
+          color: #22c55e !important;
         }
-        .sidebar-menu > li.active > a {
-          background-color: #00A86B !important;
+
+        .box-title {
+          color: #22c55e !important;
+          font-weight: bold !important;
         }
-        .pharmacy-popup {
-          animation: bounce 2s infinite;
+
+        /* Styles pour les nouveaux éléments du header */
+        .main-header .navbar .nav > li > a {
+          color: #22c55e !important;
         }
-        @keyframes bounce {
-          0%, 20%, 50%, 80%, 100% {
-            transform: translateY(0);
-          }
-          40% {
-            transform: translateY(-10px);
-          }
-          60% {
-            transform: translateY(-5px);
-          }
+
+        .main-header .navbar .nav > li > a:hover {
+          background-color: rgba(34, 197, 94, 0.1) !important;
         }
-        .main-header .navbar {
-          background-color: #2c3e50 !important;
+
+        .dropdown-menu {
+          background-color: #2d2d2d !important;
+          border: 1px solid #22c55e !important;
         }
-        .main-header .logo {
-          background-color: #2c3e50 !important;
+
+        .dropdown-menu > li > a {
+          color: white !important;
         }
-        .notification-icon {
-          color: #e74c3c;
-          animation: pulse 2s infinite;
+
+        .dropdown-menu > li > a:hover {
+          background-color: #22c55e !important;
+          color: black !important;
         }
-        @keyframes pulse {
-          0% { opacity: 1; }
-          50% { opacity: 0.5; }
-          100% { opacity: 1; }
+
+        /* Badge notifications avec couleurs */
+        .label-danger {
+          background-color: #dc3545 !important;
         }
+        
+        .label-warning {
+          background-color: #f39c12 !important;
+        }
+        
+        .label-success {
+          background-color: #28a745 !important;
+        }
+
+        /* Notifications items colors */
+        .dropdown-menu .notification-item.danger {
+          border-left: 4px solid #dc3545;
+        }
+        
+        .dropdown-menu .notification-item.warning {
+          border-left: 4px solid #f39c12;
+        }
+        
+        .dropdown-menu .notification-item.success {
+          border-left: 4px solid #28a745;
+        }
+
+        /* Inputs dans les dropdowns */
+        .dropdown-menu .form-control {
+          background-color: #1a1a1a !important;
+          border: 1px solid #22c55e !important;
+          color: white !important;
+        }
+
+        .dropdown-menu .form-control:focus {
+          border-color: #22c55e !important;
+          box-shadow: 0 0 0 0.2rem rgba(34, 197, 94, 0.25) !important;
+        }
+
+        /* Select inputs */
+        .dropdown-menu select.form-control {
+          background-color: #1a1a1a !important;
+          color: white !important;
+        }
+
+        .dropdown-menu select.form-control option {
+          background-color: #1a1a1a !important;
+          color: white !important;
+        }
+      ")), 
+      tags$script(HTML("
+        $(document).on('click', '.dropdown-menu', function (e) {
+          e.stopPropagation();
+        });
       "))
     ),
     
-    # Écran de chargement avec animation
-    conditionalPanel(
-      condition = "output.loading",
-      div(id = "loading-screen",
-          style = "position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-                   background-color: rgba(44, 62, 80, 0.9); z-index: 9999; 
-                   display: flex; justify-content: center; align-items: center; flex-direction: column;",
-          div(style = "text-align: center; color: #00A86B;",
-              h1("OSPHARM", style = "font-size: 48px; margin-bottom: 20px;"),
-              div(class = "spinner-border", role = "status", style = "width: 3rem; height: 3rem; color: #00A86B;"),
-              h3("Chargement des pharmacies...", style = "margin-top: 20px;"),
-              div(id = "loading-counter", "0/500 pharmacies chargées", style = "margin-top: 10px; font-size: 18px;")
+    # Affichage des informations sélectionnées
+    fluidRow(
+      box(
+        title = "Informations de Session", 
+        status = "info", 
+        solidHeader = TRUE, 
+        width = 12,
+        collapsible = TRUE,
+        collapsed = TRUE,
+        fluidRow(
+          column(4, 
+                 h4("Période sélectionnée:"),
+                 verbatimTextOutput("periode_display")
+          ),
+          column(4,
+                 h4("Syndicat sélectionné:"),
+                 verbatimTextOutput("selected_syndicat_display")
+          ),
+          column(4,
+                 h4("Date actuelle:"),
+                 verbatimTextOutput("current_date_display")
           )
+        )
       )
     ),
     
     tabItems(
-      # Infos Générales - Vue Carte
       tabItem(tabName = "infos_gen_carte",
               fluidRow(
-                box(title = "Cartographie des Pharmacies - Vue Générale", status = "primary", solidHeader = TRUE, width = 12,
-                    withSpinner(leafletOutput("map_general", height = "600px"), color = "#00A86B")
-                )
-              ),
-              fluidRow(
-                valueBoxOutput("total_pharmacies"),
-                valueBoxOutput("ca_total"),
-                valueBoxOutput("ca_moyen")
-              )
-      ),
-      
-      # Infos Générales - Statistiques
+                box(title = "Cartographie - Infos Générales", status = "primary", solidHeader = TRUE, width = 12,
+                    div(style = "text-align:center;padding-top:200px;color:#888;",
+                        h3("Zone carte infos générales")))
+              )),
       tabItem(tabName = "infos_gen_stats",
               fluidRow(
-                box(title = "Répartition Géographique", status = "primary", solidHeader = TRUE, width = 6,
-                    withSpinner(plotlyOutput("plot_repartition_geo"), color = "#00A86B")
-                ),
-                box(title = "Évolution du Chiffre d'Affaires", status = "primary", solidHeader = TRUE, width = 6,
-                    withSpinner(plotlyOutput("plot_evolution_ca"), color = "#00A86B")
-                )
-              ),
-              fluidRow(
-                box(title = "Tableau Détaillé", status = "primary", solidHeader = TRUE, width = 12,
-                    withSpinner(DT::dataTableOutput("table_general"), color = "#00A86B")
-                )
-              )
-      ),
+                box(title = "Statistiques - Infos Générales", status = "primary", solidHeader = TRUE, width = 12,
+                    div(style = "text-align:center;padding-top:100px;color:#888;",
+                        p("Statistiques générales ici")))
+              )),
       
-      # Infos Produits - Vue Carte
       tabItem(tabName = "produits_carte",
               fluidRow(
-                box(title = "Cartographie - Analyse Produits", status = "success", solidHeader = TRUE, width = 12,
-                    withSpinner(leafletOutput("map_produits", height = "600px"), color = "#00A86B")
-                )
-              )
-      ),
-      
-      # Infos Produits - Statistiques
+                box(title = "Cartographie - Produits", status = "success", solidHeader = TRUE, width = 12,
+                    div(style = "text-align:center;padding-top:200px;color:#888;",
+                        h3("Zone carte produits")))
+              )),
       tabItem(tabName = "produits_stats",
               fluidRow(
-                box(title = "Distribution Nombre de Produits", status = "success", solidHeader = TRUE, width = 6,
-                    withSpinner(plotlyOutput("plot_nb_produits"), color = "#00A86B")
-                ),
-                box(title = "Corrélation CA/Produits", status = "success", solidHeader = TRUE, width = 6,
-                    withSpinner(plotlyOutput("plot_correlation"), color = "#00A86B")
-                )
-              )
-      ),
+                box(title = "Statistiques - Produits", status = "success", solidHeader = TRUE, width = 12,
+                    div(style = "text-align:center;padding-top:100px;color:#888;",
+                        p("Statistiques produits ici")))
+              )),
       
-      # Infos Famille - Vue Carte
       tabItem(tabName = "famille_carte",
               fluidRow(
-                box(title = "Cartographie - Familles de Produits", status = "warning", solidHeader = TRUE, width = 12,
-                    withSpinner(leafletOutput("map_famille", height = "600px"), color = "#00A86B")
-                )
-              )
-      ),
-      
-      # Infos Famille - Statistiques
+                box(title = "Cartographie - Familles", status = "warning", solidHeader = TRUE, width = 12,
+                    div(style = "text-align:center;padding-top:200px;color:#888;",
+                        h3("Zone carte familles")))
+              )),
       tabItem(tabName = "famille_stats",
               fluidRow(
-                box(title = "Répartition par Famille", status = "warning", solidHeader = TRUE, width = 6,
-                    withSpinner(plotlyOutput("plot_famille"), color = "#00A86B")
-                ),
-                box(title = "CA par Famille", status = "warning", solidHeader = TRUE, width = 6,
-                    withSpinner(plotlyOutput("plot_ca_famille"), color = "#00A86B")
-                )
-              )
-      ),
+                box(title = "Statistiques - Familles", status = "warning", solidHeader = TRUE, width = 12,
+                    div(style = "text-align:center;padding-top:100px;color:#888;",
+                        p("Statistiques familles ici")))
+              )),
       
-      # Infos TVA - Vue Carte
       tabItem(tabName = "tva_carte",
               fluidRow(
-                box(title = "Cartographie - Taux de TVA", status = "info", solidHeader = TRUE, width = 12,
-                    withSpinner(leafletOutput("map_tva", height = "600px"), color = "#00A86B")
-                )
-              )
-      ),
-      
-      # Infos TVA - Statistiques
+                box(title = "Cartographie - TVA", status = "info", solidHeader = TRUE, width = 12,
+                    div(style = "text-align:center;padding-top:200px;color:#888;",
+                        h3("Zone carte TVA")))
+              )),
       tabItem(tabName = "tva_stats",
               fluidRow(
-                box(title = "Répartition TVA", status = "info", solidHeader = TRUE, width = 6,
-                    withSpinner(plotlyOutput("plot_tva"), color = "#00A86B")
-                ),
-                box(title = "Impact TVA sur CA", status = "info", solidHeader = TRUE, width = 6,
-                    withSpinner(plotlyOutput("plot_tva_ca"), color = "#00A86B")
-                )
-              )
-      ),
+                box(title = "Statistiques - TVA", status = "info", solidHeader = TRUE, width = 12,
+                    div(style = "text-align:center;padding-top:100px;color:#888;",
+                        p("Statistiques TVA ici")))
+              )),
       
-      # Infos Caractère - Vue Carte
       tabItem(tabName = "caractere_carte",
               fluidRow(
-                box(title = "Cartographie - Caractère des Pharmacies", status = "danger", solidHeader = TRUE, width = 12,
-                    withSpinner(leafletOutput("map_caractere", height = "600px"), color = "#00A86B")
-                )
-              )
-      ),
-      
-      # Infos Caractère - Statistiques
+                box(title = "Cartographie - Caractère", status = "danger", solidHeader = TRUE, width = 12,
+                    div(style = "text-align:center;padding-top:200px;color:#888;",
+                        h3("Zone carte caractère")))
+              )),
       tabItem(tabName = "caractere_stats",
               fluidRow(
-                box(title = "Répartition Urbain/Rural", status = "danger", solidHeader = TRUE, width = 6,
-                    withSpinner(plotlyOutput("plot_caractere"), color = "#00A86B")
-                ),
-                box(title = "Performance par Caractère", status = "danger", solidHeader = TRUE, width = 6,
-                    withSpinner(plotlyOutput("plot_perf_caractere"), color = "#00A86B")
-                )
-              )
-      ),
+                box(title = "Statistiques - Caractère", status = "danger", solidHeader = TRUE, width = 12,
+                    div(style = "text-align:center;padding-top:100px;color:#888;",
+                        p("Statistiques caractère ici")))
+              )),
       
-      # Segmentation - Vue Carte
       tabItem(tabName = "segment_carte",
               fluidRow(
                 box(title = "Cartographie - Segmentation", status = "primary", solidHeader = TRUE, width = 12,
-                    withSpinner(leafletOutput("map_segment", height = "600px"), color = "#00A86B")
-                )
-              )
-      ),
-      
-      # Segmentation - Statistiques
+                    div(style = "text-align:center;padding-top:200px;color:#888;",
+                        h3("Zone carte segmentation")))
+              )),
       tabItem(tabName = "segment_stats",
               fluidRow(
-                box(title = "Analyse Segmentation", status = "primary", solidHeader = TRUE, width = 6,
-                    withSpinner(plotlyOutput("plot_segment"), color = "#00A86B")
-                ),
-                box(title = "Matrice Segment/Performance", status = "primary", solidHeader = TRUE, width = 6,
-                    withSpinner(plotlyOutput("plot_matrice_segment"), color = "#00A86B")
-                )
-              )
-      )
+                box(title = "Statistiques - Segmentation", status = "primary", solidHeader = TRUE, width = 12,
+                    div(style = "text-align:center;padding-top:100px;color:#888;",
+                        p("Statistiques segmentation ici")))
+              ))
     )
   )
 )
 
+# Opérateur d'alternative nul (pour switch)
+`%||%` <- function(a, b) if (!is.null(a)) a else b
+
 # Serveur
-server <- function(input, output, session) {
+dashboard_server <- function(input, output, session) {
   
-  # Données réactives filtrées
-  filtered_data <- reactive({
-    data <- pharmacies_data
+  # Gestion du thème
+  observeEvent(input$theme_toggle, {
+    if (input$theme_toggle) {
+      insertUI(
+        selector = "head",
+        where = "beforeEnd",
+        ui = tags$style(id = "light-theme", HTML("
+    /* HEADER CLAIR */
+    .main-header, .main-header .navbar, .main-header .logo,
+    .skin-blue .main-header .navbar,
+    .skin-blue .main-header .logo {
+      background-color: #f4f4f4 !important;
+      color: #22c55e !important;
+    }
+
+    /* SIDEBAR CLAIR */
+    .skin-blue .main-sidebar {
+      background-color: #ffffff !important;
+    }
+
+    .skin-blue .sidebar-menu > li > a,
+    .skin-blue .sidebar-menu > li > a > i {
+      color: black !important;
+      font-weight: bold !important;
+    }
+
+    .skin-blue .sidebar-menu > li.active > a,
+    .skin-blue .sidebar-menu > li.active > a > i {
+      background-color: #22c55e !important;
+      color: black !important;
+      font-weight: bold !important;
+    }
+
+    .skin-blue .sidebar-menu > li.menu-open > a,
+    .skin-blue .sidebar-menu > li.menu-open > a > i {
+      background-color: #e6ffe6 !important;
+      color: #22c55e !important;
+      font-weight: bold !important;
+    }
+
+    /* SOUS-MENUS OUVERTS */
+    .skin-blue .sidebar-menu .treeview-menu {
+      background-color: #ffffff !important;
+    }
+
+    .skin-blue .sidebar-menu .treeview-menu > li > a,
+    .skin-blue .sidebar-menu .treeview-menu > li > a > i {
+      color: black !important;
+      font-weight: bold !important;
+    }
+
+    .skin-blue .sidebar-menu .treeview-menu > li.active > a,
+    .skin-blue .sidebar-menu .treeview-menu > li.active > a > i {
+      background-color: #22c55e !important;
+      color: black !important;
+      font-weight: bold !important;
+    }
+
+    /* ZONE DE CONTENU CLAIR */
+    .content-wrapper, .right-side, .content {
+      background-color: #ffffff !important;
+      color: black !important;
+    }
+
+    .box {
+      background-color: #ffffff !important;
+      color: black !important;
+      border: 1px solid #22c55e !important;
+      border-radius: 8px;
+    }
+
+    .box-header {
+      background-color: #ffffff !important;
+      color: #22c55e !important;
+      border-bottom: 1px solid #ddd !important;
+    }
+
+    .box-title {
+      color: #22c55e !important;
+      font-weight: bold !important;
+    }
+
+    /* LOGO & TITRES */
+    .logo-text {
+      color: #22c55e !important;
+    }
+
+    h1, h2, h3, h4, h5, h6, p {
+      color: black !important;
+    }
+
+    /* Dropdown menus en mode clair */
+    .dropdown-menu {
+      background-color: #ffffff !important;
+      border: 1px solid #ddd !important;
+    }
+
+    .dropdown-menu > li > a {
+      color: black !important;
+    }
+
+    .dropdown-menu .form-control {
+      background-color: #ffffff !important;
+      border: 1px solid #ddd !important;
+      color: black !important;
+    }
+
+    .dropdown-menu select.form-control {
+      background-color: #ffffff !important;
+      color: black !important;
+    }
+
+    .dropdown-menu select.form-control option {
+      background-color: #ffffff !important;
+      color: black !important;
+    }
+  "))
+      )
+      
+    } else {
+      removeUI(selector = "#light-theme")
+    }
+  })
+  
+  # Switch de thème
+  output$theme_switch <- renderUI({
+    shinyWidgets::materialSwitch(
+      inputId = "theme_toggle",
+      label = if (is.null(input$theme_toggle) || !input$theme_toggle) "Mode Clair" else "Mode Sombre",
+      status = "success",
+      value = input$theme_toggle %||% FALSE,
+      right = TRUE,
+      inline = TRUE
+    )
+  })
+  
+  # Affichage de la période sélectionnée dans le header
+  output$periode_selectionnee <- renderText({
+    req(input$mois_debut, input$annee_debut)
     
-    if(input$filtre_syndicat != "all") {
-      data <- data[data$syndicat == input$filtre_syndicat, ]
+    mois_noms <- c("Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+                   "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre")
+    
+    mois_debut_nom <- mois_noms[as.numeric(input$mois_debut)]
+    
+    # Si fin non renseignée, afficher uniquement début
+    if (is.null(input$mois_fin) || input$mois_fin == "") {
+      return(paste0(mois_debut_nom, " ", input$annee_debut))
     }
     
-    data <- data[data$chiffre_affaires >= input$filtre_ca[1] & 
-                   data$chiffre_affaires <= input$filtre_ca[2], ]
+    mois_fin_nom <- mois_noms[as.numeric(input$mois_fin)]
     
-    return(data)
-  })
-  
-  # Animation de chargement
-  output$loading <- reactive({
-    return(TRUE)
-  })
-  outputOptions(output, "loading", suspendWhenHidden = FALSE)
-  
-  # Simulation du chargement progressif
-  observe({
-    for(i in 1:500) {
-      Sys.sleep(0.01)  # Simulation du temps de chargement
-      session$sendCustomMessage("updateCounter", i)
+    # Convertir en "valeurs comparables"
+    debut_val <- as.numeric(input$annee_debut) * 12 + as.numeric(input$mois_debut)
+    fin_val   <- as.numeric(input$annee_fin) * 12 + as.numeric(input$mois_fin)
+    
+    # Vérification si date de fin est avant date de début
+    if (fin_val < debut_val) {
+      return("Erreur : La date de fin est antérieure à la date de début.")
     }
-    Sys.sleep(1)
-    session$sendCustomMessage("hideLoading", "")
+    
+    paste0(mois_debut_nom, " ", input$annee_debut, " à ", mois_fin_nom, " ", input$annee_fin)
   })
   
-  # JavaScript pour l'animation
-  session$sendCustomMessage("addJS", "
-    Shiny.addCustomMessageHandler('updateCounter', function(count) {
-      document.getElementById('loading-counter').innerText = count + '/500 pharmacies chargées';
-    });
-    
-    Shiny.addCustomMessageHandler('hideLoading', function(message) {
-      document.getElementById('loading-screen').style.display = 'none';
-    });
-  ")
   
-  # Cartes leaflet
-  output$map_general <- renderLeaflet({
-    leaflet(filtered_data()) %>%
-      addTiles() %>%
-      setView(lng = 2.3, lat = 46.2, zoom = 6) %>%
-      addCircleMarkers(
-        ~lng, ~lat,
-        popup = ~paste("<b>", nom, "</b><br>",
-                       "CA: ", format(chiffre_affaires, big.mark = " "), "???<br>",
-                       "Produits: ", nb_produits),
-        radius = ~sqrt(chiffre_affaires)/100,
-        color = "#00A86B",
-        fillOpacity = 0.7,
-        clusterOptions = markerClusterOptions()
+  # Affichage de la période dans le contenu principal
+  output$periode_display <- renderText({
+    req(input$mois_debut, input$annee_debut)
+    
+    mois_noms <- c("Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+                   "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre")
+    
+    mois_debut_nom <- mois_noms[as.numeric(input$mois_debut)]
+    
+    if (!is.null(input$mois_fin) && input$mois_fin != "") {
+      mois_fin_nom <- mois_noms[as.numeric(input$mois_fin)]
+      paste0("Du ", mois_debut_nom, " ", input$annee_debut, " au ", mois_fin_nom, " ", input$annee_fin)
+    } else {
+      paste0(mois_debut_nom, " ", input$annee_debut, " (mois unique)")
+    }
+  })
+  
+  # Affichage du syndicat sélectionné
+  output$selected_syndicat_display <- renderText({
+    if (!is.null(input$syndicat_filter)) {
+      switch(input$syndicat_filter,
+             "all" = "Tous les syndicats",
+             "syndicat_a" = "Syndicat A",
+             "syndicat_b" = "Syndicat B", 
+             "syndicat_c" = "Syndicat C",
+             "syndicat_d" = "Syndicat D",
+             "Non sélectionné"
       )
+    } else {
+      "Tous les syndicats"
+    }
   })
   
-  output$map_produits <- renderLeaflet({
-    leaflet(filtered_data()) %>%
-      addTiles() %>%
-      setView(lng = 2.3, lat = 46.2, zoom = 6) %>%
-      addCircleMarkers(
-        ~lng, ~lat,
-        popup = ~paste("<b>", nom, "</b><br>",
-                       "Nombre de produits: ", nb_produits),
-        radius = ~sqrt(nb_produits)/10,
-        color = "#28a745",
-        fillOpacity = 0.7
-      )
-  })
-  
-  output$map_famille <- renderLeaflet({
-    colors <- c("#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4")
-    pal <- colorFactor(colors, domain = filtered_data()$famille_principale)
-    
-    leaflet(filtered_data()) %>%
-      addTiles() %>%
-      setView(lng = 2.3, lat = 46.2, zoom = 6) %>%
-      addCircleMarkers(
-        ~lng, ~lat,
-        popup = ~paste("<b>", nom, "</b><br>",
-                       "Famille: ", famille_principale),
-        color = ~pal(famille_principale),
-        fillOpacity = 0.7
-      ) %>%
-      addLegend("bottomright", pal = pal, values = ~famille_principale,
-                title = "Famille Principale")
-  })
-  
-  output$map_tva <- renderLeaflet({
-    colors <- c("#e74c3c", "#f39c12", "#2ecc71")
-    pal <- colorFactor(colors, domain = filtered_data()$tva)
-    
-    leaflet(filtered_data()) %>%
-      addTiles() %>%
-      setView(lng = 2.3, lat = 46.2, zoom = 6) %>%
-      addCircleMarkers(
-        ~lng, ~lat,
-        popup = ~paste("<b>", nom, "</b><br>",
-                       "Taux TVA: ", tva),
-        color = ~pal(tva),
-        fillOpacity = 0.7
-      ) %>%
-      addLegend("bottomright", pal = pal, values = ~tva,
-                title = "Taux de TVA")
-  })
-  
-  output$map_caractere <- renderLeaflet({
-    colors <- c("#3498db", "#e67e22", "#9b59b6")
-    pal <- colorFactor(colors, domain = filtered_data()$caractere)
-    
-    leaflet(filtered_data()) %>%
-      addTiles() %>%
-      setView(lng = 2.3, lat = 46.2, zoom = 6) %>%
-      addCircleMarkers(
-        ~lng, ~lat,
-        popup = ~paste("<b>", nom, "</b><br>",
-                       "Caractère: ", caractere),
-        color = ~pal(caractere),
-        fillOpacity = 0.7
-      ) %>%
-      addLegend("bottomright", pal = pal, values = ~caractere,
-                title = "Caractère")
-  })
-  
-  output$map_segment <- renderLeaflet({
-    colors <- c("#gold", "#silver", "#bronze")
-    pal <- colorFactor(colors, domain = filtered_data()$segment)
-    
-    leaflet(filtered_data()) %>%
-      addTiles() %>%
-      setView(lng = 2.3, lat = 46.2, zoom = 6) %>%
-      addCircleMarkers(
-        ~lng, ~lat,
-        popup = ~paste("<b>", nom, "</b><br>",
-                       "Segment: ", segment),
-        color = ~pal(segment),
-        fillOpacity = 0.7
-      ) %>%
-      addLegend("bottomright", pal = pal, values = ~segment,
-                title = "Segment")
-  })
-  
-  # ValueBoxes
-  output$total_pharmacies <- renderValueBox({
-    valueBox(
-      value = nrow(filtered_data()),
-      subtitle = "Pharmacies totales",
-      icon = icon("hospital"),
-      color = "green"
-    )
-  })
-  
-  output$ca_total <- renderValueBox({
-    valueBox(
-      value = paste(format(sum(filtered_data()$chiffre_affaires)/1000000, digits = 1), "M???"),
-      subtitle = "CA Total",
-      icon = icon("euro-sign"),
-      color = "blue"
-    )
-  })
-  
-  output$ca_moyen <- renderValueBox({
-    valueBox(
-      value = paste(format(mean(filtered_data()$chiffre_affaires)/1000, digits = 1), "k???"),
-      subtitle = "CA Moyen",
-      icon = icon("chart-line"),
-      color = "yellow"
-    )
-  })
-  
-  # Graphiques
-  output$plot_famille <- renderPlotly({
-    data <- filtered_data() %>%
-      group_by(famille_principale) %>%
-      summarise(count = n())
-    
-    p <- ggplot(data, aes(x = famille_principale, y = count, fill = famille_principale)) +
-      geom_bar(stat = "identity") +
-      theme_minimal() +
-      labs(title = "Répartition par Famille de Produits",
-           x = "Famille", y = "Nombre de pharmacies") +
-      theme(legend.position = "none")
-    
-    ggplotly(p)
-  })
-  
-  output$plot_nb_produits <- renderPlotly({
-    p <- ggplot(filtered_data(), aes(x = nb_produits)) +
-      geom_histogram(bins = 30, fill = "#00A86B", alpha = 0.7) +
-      theme_minimal() +
-      labs(title = "Distribution du Nombre de Produits",
-           x = "Nombre de produits", y = "Fréquence")
-    
-    ggplotly(p)
-  })
-  
-  output$plot_correlation <- renderPlotly({
-    p <- ggplot(filtered_data(), aes(x = nb_produits, y = chiffre_affaires)) +
-      geom_point(alpha = 0.6, color = "#00A86B") +
-      geom_smooth(method = "lm", color = "#e74c3c") +
-      theme_minimal() +
-      labs(title = "Corrélation CA / Nombre de Produits",
-           x = "Nombre de produits", y = "Chiffre d'affaires (???)")
-    
-    ggplotly(p)
-  })
-  
-  output$plot_tva <- renderPlotly({
-    data <- filtered_data() %>%
-      group_by(tva) %>%
-      summarise(count = n())
-    
-    p <- plot_ly(data, labels = ~tva, values = ~count, type = 'pie',
-                 textposition = 'inside', textinfo = 'label+percent') %>%
-      layout(title = "Répartition des Taux de TVA")
-    
-    p
-  })
-  
-  output$plot_caractere <- renderPlotly({
-    data <- filtered_data() %>%
-      group_by(caractere) %>%
-      summarise(count = n())
-    
-    p <- plot_ly(data, x = ~caractere, y = ~count, type = 'bar',
-                 marker = list(color = c('#3498db', '#e67e22', '#9b59b6'))) %>%
-      layout(title = "Répartition Urbain/Rural",
-             xaxis = list(title = "Caractère"),
-             yaxis = list(title = "Nombre de pharmacies"))
-    
-    p
-  })
-  
-  output$plot_segment <- renderPlotly({
-    data <- filtered_data() %>%
-      group_by(segment) %>%
-      summarise(
-        count = n(),
-        ca_moyen = mean(chiffre_affaires)
-      )
-    
-    p <- plot_ly(data, x = ~segment, y = ~count, type = 'bar', name = 'Nombre',
-                 marker = list(color = '#00A86B')) %>%
-      add_trace(y = ~ca_moyen/1000, name = 'CA Moyen (k???)', yaxis = 'y2',
-                marker = list(color = '#e74c3c')) %>%
-      layout(title = "Analyse par Segment",
-             xaxis = list(title = "Segment"),
-             yaxis = list(title = "Nombre de pharmacies"),
-             yaxis2 = list(overlaying = 'y', side = 'right', title = 'CA Moyen (k???)'))
-    
-    p
-  })
-  
-  # Tableaux
-  output$table_general <- DT::renderDataTable({
-    DT::datatable(filtered_data(), 
-                  options = list(pageLength = 10, scrollX = TRUE),
-                  filter = 'top')
-  })
-  
-  # Autres graphiques (à compléter selon les besoins)
-  output$plot_repartition_geo <- renderPlotly({
-    # Graphique de répartition géographique simulé
-    regions <- c("Nord", "Sud", "Est", "Ouest", "Centre")
-    counts <- sample(50:150, 5)
-    
-    p <- plot_ly(x = regions, y = counts, type = 'bar',
-                 marker = list(color = '#00A86B')) %>%
-      layout(title = "Répartition Géographique",
-             xaxis = list(title = "Région"),
-             yaxis = list(title = "Nombre de pharmacies"))
-    p
-  })
-  
-  output$plot_evolution_ca <- renderPlotly({
-    # Simulation d'une évolution temporelle
-    mois <- month.name[1:12]
-    ca_evolution <- cumsum(sample(1000:5000, 12))
-    
-    p <- plot_ly(x = mois, y = ca_evolution, type = 'scatter', mode = 'lines+markers',
-                 line = list(color = '#00A86B', width = 3),
-                 marker = list(color = '#00A86B', size = 8)) %>%
-      layout(title = "Évolution du Chiffre d'Affaires",
-             xaxis = list(title = "Mois"),
-             yaxis = list(title = "CA Cumulé (k???)"))
-    p
-  })
-  
-  output$plot_ca_famille <- renderPlotly({
-    data <- filtered_data() %>%
-      group_by(famille_principale) %>%
-      summarise(ca_total = sum(chiffre_affaires)/1000)
-    
-    p <- plot_ly(data, x = ~famille_principale, y = ~ca_total, type = 'bar',
-                 marker = list(color = '#f39c12')) %>%
-      layout(title = "Chiffre d'Affaires par Famille",
-             xaxis = list(title = "Famille de produits"),
-             yaxis = list(title = "CA Total (k???)"))
-    p
-  })
-  
-  output$plot_tva_ca <- renderPlotly({
-    data <- filtered_data() %>%
-      group_by(tva) %>%
-      summarise(ca_moyen = mean(chiffre_affaires)/1000)
-    
-    p <- plot_ly(data, x = ~tva, y = ~ca_moyen, type = 'bar',
-                 marker = list(color = '#17a2b8')) %>%
-      layout(title = "Impact TVA sur le CA Moyen",
-             xaxis = list(title = "Taux de TVA"),
-             yaxis = list(title = "CA Moyen (k???)"))
-    p
-  })
-  
-  output$plot_perf_caractere <- renderPlotly({
-    data <- filtered_data() %>%
-      group_by(caractere) %>%
-      summarise(
-        ca_moyen = mean(chiffre_affaires)/1000,
-        nb_produits_moyen = mean(nb_produits)
-      )
-    
-    p <- plot_ly(data, x = ~caractere, y = ~ca_moyen, type = 'bar', name = 'CA Moyen (k???)',
-                 marker = list(color = '#dc3545')) %>%
-      add_trace(y = ~nb_produits_moyen/10, name = 'Nb Produits Moyen (/10)', yaxis = 'y2',
-                marker = list(color = '#28a745')) %>%
-      layout(title = "Performance par Caractère",
-             xaxis = list(title = "Caractère"),
-             yaxis = list(title = "CA Moyen (k???)"),
-             yaxis2 = list(overlaying = 'y', side = 'right', title = 'Nb Produits Moyen'))
-    
-    p
-  })
-  
-  output$plot_matrice_segment <- renderPlotly({
-    data <- filtered_data() %>%
-      group_by(segment) %>%
-      summarise(
-        ca_moyen = mean(chiffre_affaires),
-        nb_produits_moyen = mean(nb_produits)
-      )
-    
-    p <- plot_ly(data, x = ~nb_produits_moyen, y = ~ca_moyen, 
-                 text = ~segment, type = 'scatter', mode = 'markers+text',
-                 marker = list(size = 20, color = c('#FFD700', '#C0C0C0', '#CD7F32'))) %>%
-      layout(title = "Matrice Segment/Performance",
-             xaxis = list(title = "Nombre de produits moyen"),
-             yaxis = list(title = "CA Moyen (???)"))
-    
-    p
+  # Affichage de la date actuelle (dans le contenu)
+  output$current_date_display <- renderText({
+    format(Sys.time(), "%d/%m/%Y %H:%M:%S")
   })
 }
 
-# Lancement de l'application
-shinyApp(ui = ui, server = server)
+# Lancement
+shinyApp(ui = ui, server = dashboard_server)
